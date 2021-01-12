@@ -1,0 +1,14 @@
+tqdm==4.11.2
+opencv-python
+#Shapely==1.6.4.post1
+matplotlib~=3.3.0
+numpy~=1.19.2
+#tensorflow-gpu==2.3.1
+tf-nightly~=2.4.0.dev20200726
+Cython==0.24.1
+ipython==5.1.0
+#tf_slim
+
+absl-py~=0.11.0
+pandas
+scipy
