@@ -11,8 +11,8 @@ from TextRecognizer import TextRecognizer
 from create_dataset import ctpn_parse_function, ocr_parse_function, SampleGenerator
 from models import Loss
 
-batch_size = 32
-
+batch_size = 64
+epochs = 300
 
 def train_cptn():
     detector = TextDetector()
@@ -20,8 +20,8 @@ def train_cptn():
     optimizer = tf.keras.optimizers.Adam(
         tf.keras.optimizers.schedules.ExponentialDecay(1e-5, decay_steps=30000, decay_rate=0.9))
     # load dataset
-    trainset = tf.data.TFRecordDataset(join('datasets', 'trainset.tfrecord')).repeat(-1).map(ctpn_parse_function).batch(
-        1).prefetch(tf.data.experimental.AUTOTUNE)
+    trainset = tf.data.TFRecordDataset(join('datasets', 'trainset.tfrecord')).map(ctpn_parse_function).batch(
+        batch_size).prefetch(tf.data.experimental.AUTOTUNE)
     # restore from existing checkpoint
     if not exists('checkpoints'):
         mkdir('checkpoints')
@@ -31,38 +31,39 @@ def train_cptn():
     log = tf.summary.create_file_writer('checkpoints')
     # train model
     avg_loss = tf.keras.metrics.Mean(name="loss", dtype=tf.float32)
-    for image, labels in trainset:
-        if labels.shape[1] == 0:
-            print("skip sample without labels")
-            continue
-        with tf.GradientTape() as tape:
-            bbox_pred = detector.ctpn(image)
-            l = loss([bbox_pred, labels])
-        avg_loss.update_state(l)
-        # write log
-        if tf.equal(optimizer.iterations % 100, 0):
-            with log.as_default():
-                tf.summary.scalar('loss', avg_loss.result(), step=optimizer.iterations)
-                # draw text detection results
-                text_lines, _, _ = detector.detect(image, False)
-                image = image[0, ...].numpy().astype('uint8')
-                for text_line in text_lines:
-                    cv2.rectangle(image, (int(text_line[0]), int(text_line[1])), (int(text_line[2]), int(text_line[3])),
-                                  (0, 255, 0), 2)
-                image = tf.expand_dims(image, axis=0)
-                tf.summary.image('text lines', image, step=optimizer.iterations)
-            print('Step #%d Loss: %.6f lr: %.6f' % (
-                optimizer.iterations, avg_loss.result(), optimizer._hyper['learning_rate'](optimizer.iterations)))
-            if avg_loss.result() < 0.01: break;
-            avg_loss.reset_states()
-        grads = tape.gradient(l, detector.ctpn.trainable_variables)
-        if tf.reduce_any([tf.reduce_any(tf.math.is_nan(grad)) for grad in grads]):
-            print("NaN was detected in gradients, skip gradient apply!")
-            continue
-        optimizer.apply_gradients(zip(grads, detector.ctpn.trainable_variables))
-        # save model
-        if tf.equal(optimizer.iterations % 2000, 0):
-            checkpoint.save(join('checkpoints', 'ckpt'))
+    for epoch in range(epochs):
+        for image, labels in trainset:
+            if labels.shape[1] == 0:
+                print("skip sample without labels")
+                continue
+            with tf.GradientTape() as tape:
+                bbox_pred = detector.ctpn(image)
+                l = loss([bbox_pred, labels])
+            avg_loss.update_state(l)
+            # write log
+            if tf.equal(optimizer.iterations % 100, 0):
+                with log.as_default():
+                    tf.summary.scalar('loss', avg_loss.result(), step=optimizer.iterations)
+                    # draw text detection results
+                    text_lines, _, _ = detector.detect(image, False)
+                    image = image[0, ...].numpy().astype('uint8')
+                    for text_line in text_lines:
+                        cv2.rectangle(image, (int(text_line[0]), int(text_line[1])), (int(text_line[2]), int(text_line[3])),
+                                      (0, 255, 0), 2)
+                    image = tf.expand_dims(image, axis=0)
+                    tf.summary.image('text lines', image, step=optimizer.iterations)
+                print('Step #%d Loss: %.6f lr: %.6f' % (
+                    optimizer.iterations, avg_loss.result(), optimizer._hyper['learning_rate'](optimizer.iterations)))
+                if avg_loss.result() < 0.01: break;
+                avg_loss.reset_states()
+            grads = tape.gradient(l, detector.ctpn.trainable_variables)
+            if tf.reduce_any([tf.reduce_any(tf.math.is_nan(grad)) for grad in grads]):
+                print("NaN was detected in gradients, skip gradient apply!")
+                continue
+            optimizer.apply_gradients(zip(grads, detector.ctpn.trainable_variables))
+            # save model
+            if tf.equal(optimizer.iterations % 2000, 0):
+                checkpoint.save(join('checkpoints', 'ckpt'))
     # save the network structure with weights
     if not exists('result_model'):
         mkdir('result_model')
