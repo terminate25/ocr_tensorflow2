@@ -1,14 +1,15 @@
 #!/usr/bin/python3
 
-import sys
 from os import mkdir
 from os.path import join, exists
+
 import cv2
 import tensorflow as tf
-from create_dataset import ctpn_parse_function, ocr_parse_function, SampleGenerator
-from models import Loss
+
 from TextDetector import TextDetector
 from TextRecognizer import TextRecognizer
+from create_dataset import ctpn_parse_function, ocr_parse_function, SampleGenerator
+from models import Loss
 
 batch_size = 32
 
